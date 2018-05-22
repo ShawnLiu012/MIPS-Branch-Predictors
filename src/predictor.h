@@ -11,6 +11,7 @@
 
 #include <stdint.h>
 #include <stdlib.h>
+#include <string.h> // for memset()
 
 //
 // Student Information
@@ -66,5 +67,11 @@ uint8_t make_prediction(uint32_t pc);
 // indicates that the branch was not taken)
 //
 void train_predictor(uint32_t pc, uint8_t outcome);
+
+// void init_gshare();
+
+// uint8_t pred_gshare(uint32_t pc) ;
+
+// void train_gshare(uint32_t pc, uint8_t outcome);
 
 #endif
