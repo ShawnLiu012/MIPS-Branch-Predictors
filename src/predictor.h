@@ -11,7 +11,6 @@
 
 #include <stdint.h>
 #include <stdlib.h>
-#include <string.h> // for memset()
 
 //
 // Student Information
@@ -37,7 +36,14 @@ extern const char *bpName[];
 #define SN  0			// predict NT, strong not taken
 #define WN  1			// predict NT, weak not taken
 #define WT  2			// predict T, weak taken
-#define ST  3			// predict T, strong taken
+#define ST  3			// predict T, strong takenz
+
+#define SSN 0
+#define WSN 1	
+#define WWN 2	
+#define WWT 3	
+#define WST 4
+#define SST 5
 
 //------------------------------------//
 //      Predictor Configuration       //

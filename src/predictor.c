@@ -6,15 +6,15 @@
 //  described in the README                               //
 //========================================================//
 #include <stdio.h>
-#include <math.h>
+#include <string.h> // for memset()
 #include "predictor.h"
 
 //
 // TODO:Student Information
 //
-const char *studentName = "studentName";
-const char *studentID   = "studentID";
-const char *email       = "email";
+const char *studentName = "Sha Liu";
+const char *studentID   = "A53239717";
+const char *email       = "shl237@ucsd.edu";
 
 //------------------------------------//
 //      Predictor Configuration       //
@@ -185,6 +185,110 @@ void train_tournament(uint32_t pc, uint8_t outcome)
 }
 
 
+
+void init_custom() 
+{
+    ghistoryBits = 12;
+    lhistoryBits = 12;
+    pcIndexBits = 10;
+
+    globalBHT = malloc((1 << ghistoryBits) * sizeof(uint8_t));
+    localBHT = malloc((1 << lhistoryBits) * sizeof(uint8_t));
+    localPHT = malloc((1 << pcIndexBits) * sizeof(uint32_t));
+    chooserTable = malloc((1 << ghistoryBits) * sizeof(uint8_t));
+    
+    memset(globalBHT, WN, (1 << ghistoryBits) * sizeof(uint8_t));
+    memset(localBHT, WWN, (1 << lhistoryBits) * sizeof(uint8_t));
+    memset(localPHT, 0, (1 << pcIndexBits) * sizeof(uint32_t));
+    memset(chooserTable, WN, (1 << ghistoryBits) * sizeof(uint8_t));
+
+    ghistoryReg = 0;
+}
+
+uint8_t pred_custom_global(uint32_t pc) 
+{
+    globalIdx = ghistoryReg & ((1 << ghistoryBits) - 1);
+
+    if(globalBHT[globalIdx] == SN || globalBHT[globalIdx] == WN)
+        return NOTTAKEN;
+    else
+        return TAKEN;
+}
+
+uint8_t pred_custom_local(uint32_t pc) 
+{
+    patternIdx = pc & ((1 << pcIndexBits) - 1);
+    localIdx = localPHT[patternIdx];
+
+    if(localBHT[localIdx] == SSN || localBHT[localIdx] == WSN || localBHT[localIdx] == WWN)
+        return NOTTAKEN;
+    else
+        return TAKEN;
+}
+
+uint8_t pred_custom(uint32_t pc) 
+{ 
+    globalOutcome = pred_custom_global(pc);
+    localOutcome = pred_custom_local(pc);
+
+    globalIdx = ghistoryReg & ((1 << ghistoryBits) - 1); 
+
+    if(chooserTable[globalIdx] == SN || chooserTable[globalIdx] == WN)
+        return globalOutcome;
+    else
+        return localOutcome;
+}
+
+
+void train_custom(uint32_t pc, uint8_t outcome)
+{
+    // Updating the chooser table  
+    if(globalOutcome == outcome && localOutcome != outcome)
+    {
+        if(chooserTable[globalIdx] != SN)
+            chooserTable[globalIdx]--;
+    }
+    if(globalOutcome != outcome && localOutcome == outcome)
+    {
+        if(chooserTable[globalIdx] != ST)
+            chooserTable[globalIdx]++;
+    }
+
+    patternIdx = pc & ((1 << pcIndexBits) - 1);
+    localIdx = localPHT[patternIdx];
+
+    if(outcome)
+    {
+        if(localBHT[localIdx] != SST)
+            localBHT[localIdx]++;
+    }
+    else
+    {
+        if(localBHT[localIdx] != SSN)
+            localBHT[localIdx]--;   
+    }
+
+    localPHT[patternIdx] = localPHT[patternIdx] << 1;
+    localPHT[patternIdx] &= ((1 << lhistoryBits) - 1);
+    localPHT[patternIdx] |= outcome;
+
+    if(outcome)
+    {
+        if(globalBHT[globalIdx] != ST)
+            globalBHT[globalIdx]++;
+    }
+    else
+    {
+        if(globalBHT[globalIdx] != SN)
+            globalBHT[globalIdx]--;
+    }
+
+    ghistoryReg = ghistoryReg << 1;
+    ghistoryReg &= ((1 << ghistoryBits) - 1);
+    ghistoryReg |= outcome; 
+}
+
+
 //------------------------------------//
 //        Predictor Functions         //
 //------------------------------------//
@@ -206,7 +310,7 @@ void init_predictor()
             init_tournament();
             break;
         case CUSTOM:
-            // init_custom();
+            init_custom();
             break;
         default:
             break;
@@ -235,7 +339,7 @@ uint8_t make_prediction(uint32_t pc)
             return pred_tournament(pc);
             break;
         case CUSTOM:
-            // return pred_bimode(pc);
+            return pred_custom(pc);
             break;
         default:
             break;
@@ -265,7 +369,7 @@ void train_predictor(uint32_t pc, uint8_t outcome)
             train_tournament(pc, outcome);
             break;
         case CUSTOM:
-            // pred_bimode(outcome);
+            train_custom(pc, outcome);
             break;
         default:
             break;

@@ -11,4 +11,4 @@ predictor.o: predictor.h predictor.c
 	$(CC) $(OPTS) -c predictor.c
 
 clean:
-	rm -f *.o predictor;
+	rm -f *.o predictor
