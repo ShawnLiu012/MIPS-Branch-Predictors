@@ -38,12 +38,15 @@ extern const char *bpName[];
 #define WT  2			// predict T, weak taken
 #define ST  3			// predict T, strong takenz
 
-#define SSN 0
-#define WSN 1	
-#define WWN 2	
-#define WWT 3	
-#define WST 4
-#define SST 5
+// Definitions for 3-bit counters
+#define SSN 0			// predict NT
+#define SWN 1			// predict NT
+#define WSN 2			// predict NT	
+#define WWN 3			// predict NT	
+#define WWT 4			// predict T	
+#define WST 5			// predict T
+#define SWT 6			// predict T
+#define SST 7			// predict T
 
 //------------------------------------//
 //      Predictor Configuration       //
@@ -74,10 +77,32 @@ uint8_t make_prediction(uint32_t pc);
 //
 void train_predictor(uint32_t pc, uint8_t outcome);
 
-// void init_gshare();
 
-// uint8_t pred_gshare(uint32_t pc) ;
+// For gshare
+void init_gshare();
 
-// void train_gshare(uint32_t pc, uint8_t outcome);
+uint8_t pred_gshare(uint32_t pc);
+
+void train_gshare(uint32_t pc, uint8_t outcome);
+
+// For tournament
+void init_tournament();
+
+uint8_t pred_tournament(uint32_t pc);
+
+uint8_t pred_tournament_global(uint32_t pc);
+
+uint8_t pred_tournament_local(uint32_t pc);
+
+void train_tournament(uint32_t pc, uint8_t outcome);
+
+// For bimode
+void init_bimode();
+
+uint8_t pred_bimode(uint32_t pc);
+
+void train_bimode(uint32_t pc, uint8_t outcome);
+
+
 
 #endif

@@ -9,6 +9,18 @@
 #include <string.h> // for memset()
 #include "predictor.h"
 
+//==================================================================//
+//  Custom Predictor is based on                                    //
+//  The Bi-Mode Branch Predictor (Lee, Chen, and Mudge, 1997)       //
+//  https://ieeexplore.ieee.org/stamp/stamp.jsp?arnumber=645792     //
+//  Hardware Cost:                                                  //
+//  Chooser BHT (3-bits)            : 3 * 2 ^ 11 = 6144 bits        //
+//  Direction Taken BHT (2-bits)    : 2 * 2 ^ 11 = 4096 bits        //
+//  Direction Not Taken BHT (2-bits): 2 * 2 ^ 11 = 4096 bits        //
+//  Global History Register         :                11 bits        //
+//  Total                           :             14347 bits        //
+//==================================================================//
+
 //
 // TODO:Student Information
 //
@@ -37,256 +49,25 @@ int verbose;
 //
 //TODO: Add your own Branch Predictor data structures here
 //
-uint8_t *globalBHT;
-uint8_t *localBHT;
-uint8_t *chooserTable;
+uint32_t  ghistoryReg;
+
+uint8_t  *globalBHT;
+uint8_t  *localBHT;
 uint32_t *localPHT;
-uint8_t  globalOutcome;
-uint8_t  localOutcome;
-uint32_t ghistoryReg;
-uint32_t globalIdx;
-uint32_t localIdx;
-uint32_t patternIdx;
+uint8_t  *chooserBHT;
 
+uint8_t  *takenBHT;
+uint8_t  *notTakenBHT;
 
-void init_gshare() 
-{
-    globalBHT = malloc((1 << ghistoryBits) * sizeof(uint8_t));
-    memset(globalBHT, WN, (1 << ghistoryBits) * sizeof(uint8_t));  // Initiating as weakly not taken 
-    ghistoryReg = 0;
-}
+uint8_t   gOutcome;
+uint8_t   lOutcome;
 
-uint8_t pred_gshare(uint32_t pc) 
-{
-    uint32_t temp = pc ^ ghistoryReg;
-    uint32_t mask = (1 << ghistoryBits) - 1;
-    globalIdx = temp & mask;  
-    if(globalBHT[globalIdx] == SN || globalBHT[globalIdx] == WN)
-        return NOTTAKEN;
-    else
-        return TAKEN;
-}
+uint32_t  globalIdx;
+uint32_t  localIdx;
+uint32_t  patternIdx;
 
-void train_gshare(uint32_t pc, uint8_t outcome)
-{
-    // uint32_t temp = pc ^ ghistoryReg;
-    // uint32_t mask = (1 << ghistoryBits) - 1;
-    // uint32_t index = temp & mask;  
-    if(outcome)
-    {
-        if(globalBHT[globalIdx] != ST)
-            globalBHT[globalIdx]++;
-    }
-    else
-    {
-        if(globalBHT[globalIdx] != SN)
-            globalBHT[globalIdx]--;
-    }
-    ghistoryReg = ghistoryReg << 1;
-    ghistoryReg += outcome; 
-}
-
-void init_tournament() 
-{
-    globalBHT = malloc((1 << ghistoryBits) * sizeof(uint8_t));
-    localBHT = malloc((1 << lhistoryBits) * sizeof(uint8_t));
-    localPHT = malloc((1 << pcIndexBits) * sizeof(uint32_t));
-    chooserTable = malloc((1 << ghistoryBits) * sizeof(uint8_t));
-    
-    memset(globalBHT, WN, (1 << ghistoryBits) * sizeof(uint8_t));
-    memset(localBHT, WN, (1 << lhistoryBits) * sizeof(uint8_t));
-    memset(localPHT, 0, (1 << pcIndexBits) * sizeof(uint32_t));
-    memset(chooserTable, WN, (1 << ghistoryBits) * sizeof(uint8_t));
-
-    ghistoryReg = 0;
-}
-
-uint8_t pred_global(uint32_t pc) 
-{
-    globalIdx = ghistoryReg & ((1 << ghistoryBits) - 1);
-
-    if(globalBHT[globalIdx] == SN || globalBHT[globalIdx] == WN)
-        return NOTTAKEN;
-    else
-        return TAKEN;
-}
-
-uint8_t pred_local(uint32_t pc) 
-{
-    patternIdx = pc & ((1 << pcIndexBits) - 1);
-    localIdx = localPHT[patternIdx];
-
-    if(localBHT[localIdx] == SN || localBHT[localIdx] == WN)
-        return NOTTAKEN;
-    else
-        return TAKEN;
-}
-
-uint8_t pred_tournament(uint32_t pc) 
-{ 
-    globalOutcome = pred_global(pc);
-    localOutcome = pred_local(pc);
-
-    globalIdx = ghistoryReg & ((1 << ghistoryBits) - 1); 
-
-    if(chooserTable[globalIdx] == SN || chooserTable[globalIdx] == WN)
-        return globalOutcome;
-    else
-        return localOutcome;
-}
-
-
-void train_tournament(uint32_t pc, uint8_t outcome)
-{
-    // Updating the chooser table  
-    if(globalOutcome == outcome && localOutcome != outcome)
-    {
-        if(chooserTable[globalIdx] != SN)
-            chooserTable[globalIdx]--;
-    }
-    if(globalOutcome != outcome && localOutcome == outcome)
-    {
-        if(chooserTable[globalIdx] != ST)
-            chooserTable[globalIdx]++;
-    }
-
-    patternIdx = pc & ((1 << pcIndexBits) - 1);
-    localIdx = localPHT[patternIdx];
-
-    if(outcome)
-    {
-        if(localBHT[localIdx] != ST)
-            localBHT[localIdx]++;
-    }
-    else
-    {
-        if(localBHT[localIdx] != SN)
-            localBHT[localIdx]--;   
-    }
-
-    localPHT[patternIdx] = localPHT[patternIdx] << 1;
-    localPHT[patternIdx] &= ((1 << lhistoryBits) - 1);
-    localPHT[patternIdx] |= outcome;
-
-    if(outcome)
-    {
-        if(globalBHT[globalIdx] != ST)
-            globalBHT[globalIdx]++;
-    }
-    else
-    {
-        if(globalBHT[globalIdx] != SN)
-            globalBHT[globalIdx]--;
-    }
-
-    ghistoryReg = ghistoryReg << 1;
-    ghistoryReg &= ((1 << ghistoryBits) - 1);
-    ghistoryReg |= outcome; 
-}
-
-
-
-void init_custom() 
-{
-    ghistoryBits = 12;
-    lhistoryBits = 12;
-    pcIndexBits = 10;
-
-    globalBHT = malloc((1 << ghistoryBits) * sizeof(uint8_t));
-    localBHT = malloc((1 << lhistoryBits) * sizeof(uint8_t));
-    localPHT = malloc((1 << pcIndexBits) * sizeof(uint32_t));
-    chooserTable = malloc((1 << ghistoryBits) * sizeof(uint8_t));
-    
-    memset(globalBHT, WN, (1 << ghistoryBits) * sizeof(uint8_t));
-    memset(localBHT, WWN, (1 << lhistoryBits) * sizeof(uint8_t));
-    memset(localPHT, 0, (1 << pcIndexBits) * sizeof(uint32_t));
-    memset(chooserTable, WN, (1 << ghistoryBits) * sizeof(uint8_t));
-
-    ghistoryReg = 0;
-}
-
-uint8_t pred_custom_global(uint32_t pc) 
-{
-    globalIdx = ghistoryReg & ((1 << ghistoryBits) - 1);
-
-    if(globalBHT[globalIdx] == SN || globalBHT[globalIdx] == WN)
-        return NOTTAKEN;
-    else
-        return TAKEN;
-}
-
-uint8_t pred_custom_local(uint32_t pc) 
-{
-    patternIdx = pc & ((1 << pcIndexBits) - 1);
-    localIdx = localPHT[patternIdx];
-
-    if(localBHT[localIdx] == SSN || localBHT[localIdx] == WSN || localBHT[localIdx] == WWN)
-        return NOTTAKEN;
-    else
-        return TAKEN;
-}
-
-uint8_t pred_custom(uint32_t pc) 
-{ 
-    globalOutcome = pred_custom_global(pc);
-    localOutcome = pred_custom_local(pc);
-
-    globalIdx = ghistoryReg & ((1 << ghistoryBits) - 1); 
-
-    if(chooserTable[globalIdx] == SN || chooserTable[globalIdx] == WN)
-        return globalOutcome;
-    else
-        return localOutcome;
-}
-
-
-void train_custom(uint32_t pc, uint8_t outcome)
-{
-    // Updating the chooser table  
-    if(globalOutcome == outcome && localOutcome != outcome)
-    {
-        if(chooserTable[globalIdx] != SN)
-            chooserTable[globalIdx]--;
-    }
-    if(globalOutcome != outcome && localOutcome == outcome)
-    {
-        if(chooserTable[globalIdx] != ST)
-            chooserTable[globalIdx]++;
-    }
-
-    patternIdx = pc & ((1 << pcIndexBits) - 1);
-    localIdx = localPHT[patternIdx];
-
-    if(outcome)
-    {
-        if(localBHT[localIdx] != SST)
-            localBHT[localIdx]++;
-    }
-    else
-    {
-        if(localBHT[localIdx] != SSN)
-            localBHT[localIdx]--;   
-    }
-
-    localPHT[patternIdx] = localPHT[patternIdx] << 1;
-    localPHT[patternIdx] &= ((1 << lhistoryBits) - 1);
-    localPHT[patternIdx] |= outcome;
-
-    if(outcome)
-    {
-        if(globalBHT[globalIdx] != ST)
-            globalBHT[globalIdx]++;
-    }
-    else
-    {
-        if(globalBHT[globalIdx] != SN)
-            globalBHT[globalIdx]--;
-    }
-
-    ghistoryReg = ghistoryReg << 1;
-    ghistoryReg &= ((1 << ghistoryBits) - 1);
-    ghistoryReg |= outcome; 
-}
+uint32_t  directionIdx;
+uint32_t  chooserIdx;
 
 
 //------------------------------------//
@@ -310,7 +91,8 @@ void init_predictor()
             init_tournament();
             break;
         case CUSTOM:
-            init_custom();
+            init_bimode();
+            // init_custom();
             break;
         default:
             break;
@@ -339,7 +121,7 @@ uint8_t make_prediction(uint32_t pc)
             return pred_tournament(pc);
             break;
         case CUSTOM:
-            return pred_custom(pc);
+            return pred_bimode(pc);
             break;
         default:
             break;
@@ -369,11 +151,258 @@ void train_predictor(uint32_t pc, uint8_t outcome)
             train_tournament(pc, outcome);
             break;
         case CUSTOM:
-            train_custom(pc, outcome);
+            train_bimode(pc, outcome);
             break;
         default:
             break;
     }
 }
 
+//------------------------------------//
+//     Helper Functions For Gshare    //
+//------------------------------------//
+
+void init_gshare() 
+{
+    globalBHT = malloc((1 << ghistoryBits) * sizeof(uint8_t));
+    memset(globalBHT, WN, (1 << ghistoryBits) * sizeof(uint8_t)); 
+    ghistoryReg = 0;
+}
+
+uint8_t pred_gshare(uint32_t pc) 
+{
+    globalIdx = (pc ^ ghistoryReg) & ((1 << ghistoryBits) - 1);  
+    if(globalBHT[globalIdx] == SN || globalBHT[globalIdx] == WN)
+        return NOTTAKEN;
+    else
+        return TAKEN;
+}
+
+void train_gshare(uint32_t pc, uint8_t outcome)
+{ 
+    if(outcome == TAKEN)
+    {
+        if(globalBHT[globalIdx] < ST)
+            globalBHT[globalIdx]++;
+    }
+    else
+    {
+        if(globalBHT[globalIdx] > SN)
+            globalBHT[globalIdx]--;
+    }
+
+    ghistoryReg = ghistoryReg << 1;
+    ghistoryReg += outcome; 
+}
+
+
+//------------------------------------//
+//  Helper Functions For Tournament   //
+//------------------------------------//
+
+void init_tournament() 
+{
+    globalBHT  = malloc((1 << ghistoryBits) * sizeof(uint8_t));
+    localBHT   = malloc((1 << lhistoryBits) * sizeof(uint8_t));
+    localPHT   = malloc((1 << pcIndexBits) * sizeof(uint32_t));
+    chooserBHT = malloc((1 << ghistoryBits) * sizeof(uint8_t));
+    
+    memset(globalBHT, WN, (1 << ghistoryBits) * sizeof(uint8_t));
+    memset(localBHT, WN, (1 << lhistoryBits) * sizeof(uint8_t));
+    memset(localPHT, 0, (1 << pcIndexBits) * sizeof(uint32_t));
+    memset(chooserBHT, WN, (1 << ghistoryBits) * sizeof(uint8_t));
+
+    ghistoryReg = 0;
+}
+
+uint8_t pred_tournament_global(uint32_t pc) 
+{
+    globalIdx = ghistoryReg & ((1 << ghistoryBits) - 1);
+
+    if(globalBHT[globalIdx] < WT)
+        return NOTTAKEN;
+    else
+        return TAKEN;
+}
+
+uint8_t pred_tournament_local(uint32_t pc) 
+{
+    patternIdx = pc & ((1 << pcIndexBits) - 1);
+    localIdx = localPHT[patternIdx];
+
+    if(localBHT[localIdx] < WT)
+        return NOTTAKEN;
+    else
+        return TAKEN;
+}
+
+uint8_t pred_tournament(uint32_t pc) 
+{ 
+    gOutcome = pred_tournament_global(pc);
+    lOutcome = pred_tournament_local(pc);
+
+    globalIdx = ghistoryReg & ((1 << ghistoryBits) - 1); 
+
+    if(chooserBHT[globalIdx] < WT)
+        return gOutcome;
+    else
+        return lOutcome;
+}
+
+
+void train_tournament(uint32_t pc, uint8_t outcome)
+{ 
+    if(gOutcome != outcome && lOutcome == outcome)
+    {
+        if(chooserBHT[globalIdx] < ST)
+            chooserBHT[globalIdx]++;
+    }
+    if(gOutcome == outcome && lOutcome != outcome)
+    {
+        if(chooserBHT[globalIdx] > SN)
+            chooserBHT[globalIdx]--;
+    }
+    
+    patternIdx = pc & ((1 << pcIndexBits) - 1);
+    localIdx = localPHT[patternIdx];
+
+    if(outcome == TAKEN)
+    {
+        if(localBHT[localIdx] < ST)
+            localBHT[localIdx]++;
+    }
+    else
+    {
+        if(localBHT[localIdx] > SN)
+            localBHT[localIdx]--;   
+    }
+
+    localPHT[patternIdx] = localPHT[patternIdx] << 1;
+    localPHT[patternIdx] &= ((1 << lhistoryBits) - 1);
+    localPHT[patternIdx] += outcome;
+
+    if(outcome == TAKEN)
+    {
+        if(globalBHT[globalIdx] < ST)
+            globalBHT[globalIdx]++;
+    }
+    else
+    {
+        if(globalBHT[globalIdx] > SN)
+            globalBHT[globalIdx]--;
+    }
+
+    ghistoryReg = ghistoryReg << 1;
+    ghistoryReg &= ((1 << ghistoryBits) - 1);
+    ghistoryReg += outcome; 
+}
+
+
+//------------------------------------//
+//     Helper Functions For Bimode    //
+//------------------------------------//
+
+void init_bimode() 
+{
+    ghistoryReg  = 0;
+
+    ghistoryBits = 11;
+    pcIndexBits  = 11;
+
+    takenBHT     = malloc((1 << ghistoryBits) * sizeof(uint8_t));
+    notTakenBHT  = malloc((1 << ghistoryBits) * sizeof(uint8_t));
+    chooserBHT   = malloc((1 << pcIndexBits) * sizeof(uint8_t));
+    
+    memset(takenBHT, WT, (1 << ghistoryBits) * sizeof(uint8_t));
+    memset(notTakenBHT, WN, (1 << ghistoryBits) * sizeof(uint8_t));
+    memset(chooserBHT, WWN, (1 << pcIndexBits) * sizeof(uint8_t));   
+}
+
+uint8_t pred_bimode(uint32_t pc) 
+{
+    directionIdx = (pc ^ ghistoryReg) & ((1 << ghistoryBits) - 1);
+    chooserIdx   = pc & ((1 << pcIndexBits) - 1);
+
+    if(chooserBHT[chooserIdx] < WWT)
+    {
+        // Use direction not-taken BHT
+        if(notTakenBHT[directionIdx] < WT)
+            return NOTTAKEN;
+        else
+            return TAKEN;
+    }
+    else
+    {
+        // Use direction taken BHT
+        if(takenBHT[directionIdx] < WT)
+            return NOTTAKEN;
+        else
+            return TAKEN;
+    }
+}
+
+void train_bimode(uint32_t pc, uint8_t outcome)
+{
+    // Update chooser BHT
+    if(outcome == TAKEN)
+    {
+        if(chooserBHT[chooserIdx] < WWT)
+        {
+            if(notTakenBHT[directionIdx] < WT)
+                chooserBHT[chooserIdx]++;
+        }
+        else
+        {
+            if(chooserBHT[chooserIdx] < SST)
+                chooserBHT[chooserIdx]++;
+        }
+    }
+    else
+    {
+        if(chooserBHT[chooserIdx] > WWN)
+        {
+            if(takenBHT[directionIdx] > WN)
+                chooserBHT[chooserIdx]--;
+        }
+        else
+        {
+            if(chooserBHT[chooserIdx] > SSN)
+                chooserBHT[chooserIdx]--;
+        }
+    }
+
+    // Update direction taken BHT and direction not-taken BHT
+    if(chooserBHT[chooserIdx] < WWT)
+    {
+        if(outcome == TAKEN)
+        {
+            if(notTakenBHT[directionIdx] < ST)
+                notTakenBHT[directionIdx]++;
+        }
+        else
+        {
+            if(notTakenBHT[directionIdx] > SN)
+                notTakenBHT[directionIdx]--;
+        }
+
+    }
+    else
+    {
+        if(outcome == TAKEN)
+        {
+            if(takenBHT[directionIdx] < ST)
+                takenBHT[directionIdx]++;
+        }
+        else
+        {
+            if(takenBHT[directionIdx] > SN)
+                takenBHT[directionIdx]--;
+        }
+    }
+
+    // Shift and mask GHR
+    ghistoryReg = ghistoryReg << 1;
+    ghistoryReg &= ((1 << ghistoryBits) - 1);
+    ghistoryReg += outcome; 
+}
 
